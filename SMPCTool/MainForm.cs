@@ -357,13 +357,16 @@ namespace SMPCTool
 			}
 				string path = text + "\\toc";
 				if (!File.Exists(path)) path = text + "\\TOC";
+				if (!File.Exists(path)) path = text + "\\toc.BAK";
+				if (!File.Exists(path)) path = text + "\\TOC.BAK";
+				
 				bool flag3 = !File.Exists(path);
-			if (flag3)
-			{
-				MessageBox.Show("TOC (Table of Contents) file is missing!", "", MessageBoxButtons.OK, MessageBoxIcon.Hand);
-				File.Delete("assetArchiveDir.txt");
-				this.Init();
-			}
+				if (flag3)
+				{
+					MessageBox.Show("TOC (Table of Contents) file is missing!\n\nExpected path: " + text + "\\toc\n(Or TOC, toc.BAK, TOC.BAK)", "Error", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+					File.Delete("assetArchiveDir.txt");
+					this.Init();
+				}
 			else
 			{
 				Globals.AssetArchivesDirectory = text + "\\";
@@ -371,14 +374,17 @@ namespace SMPCTool
 				// Auto-detect platform based on archive file naming
 				AutoDetectPlatform(Globals.AssetArchivesDirectory);
 
-				bool flag4 = !File.Exists(Globals.AssetArchivesDirectory + "toc.BAK");
-					if (flag4)
-					{
-						string tocPath = Globals.AssetArchivesDirectory + "toc";
-						if (!File.Exists(tocPath)) tocPath = Globals.AssetArchivesDirectory + "TOC";
-						File.Copy(tocPath, Globals.AssetArchivesDirectory + "toc.BAK");
-					}
-					Globals.TOC = new TOC(Globals.AssetArchivesDirectory + "toc.BAK");
+					// path is already set correctly from checks above
+					bool flag4 = !File.Exists(Globals.AssetArchivesDirectory + "toc.BAK");
+						if (flag4 && !path.EndsWith(".BAK"))
+						{
+							File.Copy(path, Globals.AssetArchivesDirectory + "toc.BAK");
+						}
+						
+						if (File.Exists(Globals.AssetArchivesDirectory + "toc.BAK"))
+							Globals.TOC = new TOC(Globals.AssetArchivesDirectory + "toc.BAK");
+						else
+							Globals.TOC = new TOC(path);
 				Globals.TOC.Decompress(Globals.TemporaryDirectory + "toc.dec");
 				Globals.TOC.ParseDecompressed();
 				this.ArchiveTreeViewReset();
@@ -499,11 +505,14 @@ namespace SMPCTool
 					string str = saveFileDialog.FileName.Substring(0, saveFileDialog.FileName.LastIndexOf("\\"));
 						string path = str + "\\toc";
 						if (!File.Exists(path)) path = str + "\\TOC";
+						if (!File.Exists(path)) path = str + "\\toc.BAK";
+						if (!File.Exists(path)) path = str + "\\TOC.BAK";
+						
 						bool flag4 = !File.Exists(path);
-					if (flag4)
-					{
-						MessageBox.Show("TOC (Table of Contents) file is missing!", "", MessageBoxButtons.OK, MessageBoxIcon.Hand);
-					}
+						if (flag4)
+						{
+							MessageBox.Show("TOC (Table of Contents) file is missing!\n\nExpected path: " + str + "\\toc\n(Or TOC, toc.BAK, TOC.BAK)", "Error", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+						}
 					else
 					{
 						Globals.AssetArchivesDirectory = str + "\\";
@@ -513,14 +522,17 @@ namespace SMPCTool
 						AutoDetectPlatform(Globals.AssetArchivesDirectory);
 
 						MessageBox.Show("Asset Archives Successfully Set! (" + Globals.Platform.ToString() + " mode)", "", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
-						bool flag5 = !File.Exists(Globals.AssetArchivesDirectory + "toc.BAK");
-							if (flag5)
-							{
-								string tocPath = Globals.AssetArchivesDirectory + "toc";
-								if (!File.Exists(tocPath)) tocPath = Globals.AssetArchivesDirectory + "TOC";
-								File.Copy(tocPath, Globals.AssetArchivesDirectory + "toc.BAK");
-							}
-							Globals.TOC = new TOC(Globals.AssetArchivesDirectory + "toc.BAK");
+							// path is already set correctly from checks above
+							bool flag5 = !File.Exists(Globals.AssetArchivesDirectory + "toc.BAK");
+								if (flag5 && !path.EndsWith(".BAK"))
+								{
+									File.Copy(path, Globals.AssetArchivesDirectory + "toc.BAK");
+								}
+								
+								if (File.Exists(Globals.AssetArchivesDirectory + "toc.BAK"))
+									Globals.TOC = new TOC(Globals.AssetArchivesDirectory + "toc.BAK");
+								else
+									Globals.TOC = new TOC(path);
 						Globals.TOC.Decompress(Globals.TemporaryDirectory + "toc.dec");
 						Globals.TOC.ParseDecompressed();
 						this.ArchiveTreeViewReset();
