@@ -712,7 +712,7 @@ namespace SMPCTool
 		// Token: 0x06000053 RID: 83 RVA: 0x00006294 File Offset: 0x00004494
 			private void UpdateFileListView()
 			{
-				if (this.archiveTreeView.SelectedNode == null) return;
+				if (this.archiveTreeView.SelectedNode == null || Globals.TOC == null || Globals.TOC.TOCMaps == null) return;
 	
 				this.fileListView.BeginUpdate();
 				this.ClearRows(this.fileListView);
@@ -727,32 +727,34 @@ namespace SMPCTool
 				int index = (int)rootNode.Tag; // Use original index from Tag
 	
 				bool flag = fullPath.IndexOf("\\") == -1;
-			if (flag)
-			{
-				this.DisposeLVCS();
-				for (int i = 0; i < Globals.TOC.TOCMaps.Length; i++)
+				if (flag)
 				{
-					foreach (TOCMapEntry tocmapEntry in Globals.TOC.TOCMaps[i].TOCMapEntries)
+					this.DisposeLVCS();
+					for (int i = 0; i < Globals.TOC.TOCMaps.Length; i++)
 					{
-						bool flag2 = tocmapEntry.ArchiveIndex == index;
-						if (flag2)
+						if (Globals.TOC.TOCMaps[i] == null || Globals.TOC.TOCMaps[i].TOCMapEntries == null) continue;
+						foreach (TOCMapEntry tocmapEntry in Globals.TOC.TOCMaps[i].TOCMapEntries)
 						{
-							bool flag3 = tocmapEntry.FileName.StartsWith("0x") || !tocmapEntry.FileName.Contains("\\");
-							if (flag3)
+							if (tocmapEntry == null) continue;
+							bool flag2 = tocmapEntry.ArchiveIndex == index;
+							if (flag2)
 							{
-								string[] items = new string[]
+								bool flag3 = tocmapEntry.FileName.StartsWith("0x") || !tocmapEntry.FileName.Contains("\\");
+								if (flag3)
 								{
-									tocmapEntry.FileName,
-									tocmapEntry.FileSize.ToString(),
-									"Unknown",
-									tocmapEntry.FileAssetID.ToString()
-								};
-								this.fileListView.Items.Add(new ListViewItem(items));
+									string[] items = new string[]
+									{
+										tocmapEntry.FileName,
+										tocmapEntry.FileSize.ToString(),
+										"Unknown",
+										tocmapEntry.FileAssetID.ToString()
+									};
+									this.fileListView.Items.Add(new ListViewItem(items));
+								}
 							}
 						}
 					}
 				}
-			}
 				else
 				{
 					this.InitLVCS();
@@ -766,8 +768,10 @@ namespace SMPCTool
 					string text = fullPath.Substring(backslashIndex + 1);
 					for (int j = 0; j < Globals.TOC.TOCMaps.Length; j++)
 					{
+						if (Globals.TOC.TOCMaps[j] == null || Globals.TOC.TOCMaps[j].TOCMapEntries == null) continue;
 						foreach (TOCMapEntry tocmapEntry2 in Globals.TOC.TOCMaps[j].TOCMapEntries)
 						{
+							if (tocmapEntry2 == null) continue;
 							bool flag4 = tocmapEntry2.ArchiveIndex == index;
 							if (flag4)
 							{
@@ -800,6 +804,18 @@ namespace SMPCTool
 											};
 											this.fileListView.Items.Add(new ListViewItem(items2));
 										}
+									}
+									else if (tocmapEntry2.FileName.Length == text.Length)
+									{
+										// Handle cases where the filename is exactly the folder name (PS4 edge case)
+										string[] items2 = new string[]
+										{
+											Path.GetFileNameWithoutExtension(tocmapEntry2.FileName),
+											tocmapEntry2.FileSize.ToString(),
+											"File",
+											tocmapEntry2.FileAssetID.ToString()
+										};
+										this.fileListView.Items.Add(new ListViewItem(items2));
 									}
 								}
 							}
