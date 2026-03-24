@@ -645,15 +645,16 @@ namespace SMPCTool
 		}
 
 		// Token: 0x06000050 RID: 80 RVA: 0x00006028 File Offset: 0x00004228
-		private TreeNode GetRootNode(TreeNode node)
-		{
-			TreeNode treeNode = node;
-			while (treeNode.Parent != null)
+			private TreeNode GetRootNode(TreeNode node)
 			{
-				treeNode = treeNode.Parent;
+				if (node == null) return null;
+				TreeNode treeNode = node;
+				while (treeNode.Parent != null)
+				{
+					treeNode = treeNode.Parent;
+				}
+				return treeNode;
 			}
-			return treeNode;
-		}
 
 		// Token: 0x06000051 RID: 81 RVA: 0x00006058 File Offset: 0x00004258
 		private TreeNode FindTreeNodeWithPath(TreeNodeCollection nodes, string path)
@@ -912,9 +913,11 @@ namespace SMPCTool
 		}
 
 		// Token: 0x06000057 RID: 87 RVA: 0x0000687C File Offset: 0x00004A7C
-		private TOCMapEntry GetTOCMapEntryFromFileListSelection()
-		{
-			int index = this.GetRootNode(this.archiveTreeView.SelectedNode).Index;
+			private TOCMapEntry GetTOCMapEntryFromFileListSelection()
+			{
+				TreeNode rootNode = this.GetRootNode(this.archiveTreeView.SelectedNode);
+				if (rootNode == null) return null;
+				int index = rootNode.Index;
 			bool flag = this.fileListView.SelectedItems.Count <= 0;
 			TOCMapEntry result;
 			if (flag)
@@ -1824,7 +1827,9 @@ namespace SMPCTool
 					{
 						string str = saveFileDialog.FileName.Substring(0, saveFileDialog.FileName.LastIndexOf("\\")) + "\\";
 						string fullPath = this.archiveTreeView.SelectedNode.FullPath;
-						int index = this.GetRootNode(this.archiveTreeView.SelectedNode).Index;
+							TreeNode rootNode = this.GetRootNode(this.archiveTreeView.SelectedNode);
+							if (rootNode == null) return;
+							int index = rootNode.Index;
 						string text = fullPath.Substring(fullPath.IndexOf("\\") + 1) + "\\";
 						MainForm.DisplayWaitForm(this, "Extracting " + text);
 						for (int i = 0; i < Globals.TOC.TOCMaps.Length; i++)
