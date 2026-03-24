@@ -753,40 +753,59 @@ namespace SMPCTool
 					}
 				}
 			}
-			else
-			{
-				this.InitLVCS();
-				string text = fullPath.Substring(fullPath.IndexOf("\\") + 1);
-				for (int j = 0; j < Globals.TOC.TOCMaps.Length; j++)
+				else
 				{
-					foreach (TOCMapEntry tocmapEntry2 in Globals.TOC.TOCMaps[j].TOCMapEntries)
+					this.InitLVCS();
+					int backslashIndex = fullPath.IndexOf("\\");
+					if (backslashIndex == -1 || backslashIndex + 1 >= fullPath.Length)
 					{
-						bool flag4 = tocmapEntry2.ArchiveIndex == index;
-						if (flag4)
+						this.fileListView.EndUpdate();
+						return;
+					}
+					
+					string text = fullPath.Substring(backslashIndex + 1);
+					for (int j = 0; j < Globals.TOC.TOCMaps.Length; j++)
+					{
+						foreach (TOCMapEntry tocmapEntry2 in Globals.TOC.TOCMaps[j].TOCMapEntries)
 						{
-							bool flag5 = tocmapEntry2.FileName.IndexOf(text) != -1;
-							if (flag5)
+							bool flag4 = tocmapEntry2.ArchiveIndex == index;
+							if (flag4)
 							{
-								bool flag6 = !tocmapEntry2.FileName.Substring(text.Length + 1).Contains("\\");
-								if (flag6)
+								bool flag5 = tocmapEntry2.FileName.IndexOf(text) != -1;
+								if (flag5)
 								{
-									string text2 = Path.GetExtension(tocmapEntry2.FileName);
-									text2 = text2.Substring(1);
-									text2 = char.ToUpper(text2[0]).ToString() + text2.Substring(1);
-									string[] items2 = new string[]
+									// Safety check for Substring to prevent ArgumentOutOfRangeException
+									if (tocmapEntry2.FileName.Length > text.Length + 1)
 									{
-										Path.GetFileNameWithoutExtension(tocmapEntry2.FileName),
-										tocmapEntry2.FileSize.ToString(),
-										text2,
-										tocmapEntry2.FileAssetID.ToString()
-									};
-									this.fileListView.Items.Add(new ListViewItem(items2));
+										bool flag6 = !tocmapEntry2.FileName.Substring(text.Length + 1).Contains("\\");
+										if (flag6)
+										{
+											string text2 = Path.GetExtension(tocmapEntry2.FileName);
+											if (!string.IsNullOrEmpty(text2) && text2.Length > 1)
+											{
+												text2 = text2.Substring(1);
+												text2 = char.ToUpper(text2[0]).ToString() + text2.Substring(1);
+											}
+											else
+											{
+												text2 = "Unknown";
+											}
+											
+											string[] items2 = new string[]
+											{
+												Path.GetFileNameWithoutExtension(tocmapEntry2.FileName),
+												tocmapEntry2.FileSize.ToString(),
+												text2,
+												tocmapEntry2.FileAssetID.ToString()
+											};
+											this.fileListView.Items.Add(new ListViewItem(items2));
+										}
+									}
 								}
 							}
 						}
 					}
 				}
-			}
 			bool flag7 = this.lvcs != null;
 			if (flag7)
 			{
