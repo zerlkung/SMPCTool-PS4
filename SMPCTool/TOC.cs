@@ -281,7 +281,9 @@ namespace SMPCTool
 			BinaryReader binaryReader = new BinaryReader(File.OpenRead(this.decompressedFileName));
 			binaryReader.BaseStream.Position = (long)offset;
 			this.ArchiveFiles = new List<ArchiveFile>();
-			for (int i = 0; i < length / 72; i++)
+			for (int i = 0; i < length / 24; i++)  // เปลี่ยนจาก 72 → 24
+    // PC อ่าน: 3 bytes skip + InstallBucket + Chunkmap(4) + Filename(7+null) + 57 bytes
+    // PS4: 4 bytes unk1 + 4 bytes unk2 (sequential ID) + 8 bytes filename + 4 bytes unk3 + 4 bytes unk4
 			{
 				ArchiveFile item = default(ArchiveFile);
 				binaryReader.ReadBytes(3);
