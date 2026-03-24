@@ -355,8 +355,9 @@ namespace SMPCTool
 				File.WriteAllText("assetArchiveDir.txt", text);
 				MessageBox.Show("Asset Archives Set", "", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
 			}
-			string path = text + "\\toc";
-			bool flag3 = !File.Exists(path);
+				string path = text + "\\toc";
+				if (!File.Exists(path)) path = text + "\\TOC";
+				bool flag3 = !File.Exists(path);
 			if (flag3)
 			{
 				MessageBox.Show("TOC (Table of Contents) file is missing!", "", MessageBoxButtons.OK, MessageBoxIcon.Hand);
@@ -371,11 +372,13 @@ namespace SMPCTool
 				AutoDetectPlatform(Globals.AssetArchivesDirectory);
 
 				bool flag4 = !File.Exists(Globals.AssetArchivesDirectory + "toc.BAK");
-				if (flag4)
-				{
-					File.Copy(Globals.AssetArchivesDirectory + "toc", Globals.AssetArchivesDirectory + "toc.BAK");
-				}
-				Globals.TOC = new TOC(Globals.AssetArchivesDirectory + "toc.BAK");
+					if (flag4)
+					{
+						string tocPath = Globals.AssetArchivesDirectory + "toc";
+						if (!File.Exists(tocPath)) tocPath = Globals.AssetArchivesDirectory + "TOC";
+						File.Copy(tocPath, Globals.AssetArchivesDirectory + "toc.BAK");
+					}
+					Globals.TOC = new TOC(Globals.AssetArchivesDirectory + "toc.BAK");
 				Globals.TOC.Decompress(Globals.TemporaryDirectory + "toc.dec");
 				Globals.TOC.ParseDecompressed();
 				this.ArchiveTreeViewReset();
@@ -494,8 +497,9 @@ namespace SMPCTool
 				if (!flag3)
 				{
 					string str = saveFileDialog.FileName.Substring(0, saveFileDialog.FileName.LastIndexOf("\\"));
-					string path = str + "\\toc";
-					bool flag4 = !File.Exists(path);
+						string path = str + "\\toc";
+						if (!File.Exists(path)) path = str + "\\TOC";
+						bool flag4 = !File.Exists(path);
 					if (flag4)
 					{
 						MessageBox.Show("TOC (Table of Contents) file is missing!", "", MessageBoxButtons.OK, MessageBoxIcon.Hand);
@@ -510,11 +514,13 @@ namespace SMPCTool
 
 						MessageBox.Show("Asset Archives Successfully Set! (" + Globals.Platform.ToString() + " mode)", "", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
 						bool flag5 = !File.Exists(Globals.AssetArchivesDirectory + "toc.BAK");
-						if (flag5)
-						{
-							File.Copy(Globals.AssetArchivesDirectory + "toc", Globals.AssetArchivesDirectory + "toc.BAK");
-						}
-						Globals.TOC = new TOC(Globals.AssetArchivesDirectory + "toc.BAK");
+							if (flag5)
+							{
+								string tocPath = Globals.AssetArchivesDirectory + "toc";
+								if (!File.Exists(tocPath)) tocPath = Globals.AssetArchivesDirectory + "TOC";
+								File.Copy(tocPath, Globals.AssetArchivesDirectory + "toc.BAK");
+							}
+							Globals.TOC = new TOC(Globals.AssetArchivesDirectory + "toc.BAK");
 						Globals.TOC.Decompress(Globals.TemporaryDirectory + "toc.dec");
 						Globals.TOC.ParseDecompressed();
 						this.ArchiveTreeViewReset();
