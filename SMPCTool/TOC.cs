@@ -19,15 +19,21 @@ namespace SMPCTool
 		public void Compress(string fileName)
 		{
 			BinaryReader binaryReader = new BinaryReader(File.OpenRead(this.decompressedFileName));
-			List<byte> list = ZlibStream.CompressBuffer(binaryReader.ReadBytes((int)binaryReader.BaseStream.Length)).ToList<byte>();
-			list.InsertRange(0, BitConverter.GetBytes((int)binaryReader.BaseStream.Length));
-			list.InsertRange(0, new byte[]
+			byte[] rawData = binaryReader.ReadBytes((int)binaryReader.BaseStream.Length);
+			List<byte> list = ZlibStream.CompressBuffer(rawData).ToList<byte>();
+			list.InsertRange(0, BitConverter.GetBytes(rawData.Length));
+
+			if (Globals.Platform == PlatformMode.PS4)
 			{
-				175,
-				18,
-				175,
-				119
-			});
+				// PS4 TOC magic: 0x77AF12AF (bytes: AF 12 AF 77)
+				list.InsertRange(0, new byte[] { 0xAF, 0x12, 0xAF, 0x77 });
+			}
+			else
+			{
+				// PC TOC magic: 0x77AF12AF (same bytes: AF 12 AF 77)
+				list.InsertRange(0, new byte[] { 175, 18, 175, 119 });
+			}
+
 			File.WriteAllBytes(fileName, list.ToArray());
 			binaryReader.Close();
 			binaryReader.Dispose();
@@ -38,14 +44,67 @@ namespace SMPCTool
 		{
 			Console.WriteLine("Decompressing TOC...");
 			BinaryReader binaryReader = new BinaryReader(File.OpenRead(this.Filename));
-			uint num = binaryReader.ReadUInt32();
-			int count = binaryReader.ReadInt32();
-			byte[] bytes = ZlibStream.UncompressBuffer(binaryReader.ReadBytes(count));
+			uint magic = binaryReader.ReadUInt32();
+			int expectedSize = binaryReader.ReadInt32();
+			byte[] compressedData = binaryReader.ReadBytes((int)(binaryReader.BaseStream.Length - binaryReader.BaseStream.Position));
 			binaryReader.Close();
 			binaryReader.Dispose();
+
+			byte[] bytes;
+			// Both PC and PS4 use zlib compression.
+			// PS4 may report "incomplete stream" with UncompressBuffer but works
+			// fine with streaming decompression.
+			try
+			{
+				bytes = ZlibStream.UncompressBuffer(compressedData);
+			}
+			catch
+			{
+				// Fallback: use streaming decompression (handles PS4 truncation edge case)
+				using (var ms = new MemoryStream(compressedData))
+				using (var zs = new ZlibStream(ms, Ionic.Zlib.CompressionMode.Decompress))
+				using (var output = new MemoryStream())
+				{
+					zs.CopyTo(output);
+					bytes = output.ToArray();
+				}
+			}
+
 			File.WriteAllBytes(fileName, bytes);
 			this.decompressedFileName = fileName;
 			Console.WriteLine("Done decompressing TOC!");
+		}
+
+		/// <summary>
+		/// Multi-block zlib decompression for PS4 TOC/DAG files.
+		/// PS4 files may contain multiple concatenated zlib streams.
+		/// </summary>
+		private static byte[] MultiBlockZlibDecompress(byte[] data, int expectedSize)
+		{
+			List<byte> result = new List<byte>();
+			int offset = 0;
+			while (offset < data.Length && result.Count < expectedSize)
+			{
+				// Look for zlib header (0x78)
+				if (data[offset] != 0x78)
+				{
+					offset++;
+					continue;
+				}
+				try
+				{
+					byte[] remaining = new byte[data.Length - offset];
+					Array.Copy(data, offset, remaining, 0, remaining.Length);
+					byte[] chunk = ZlibStream.UncompressBuffer(remaining);
+					result.AddRange(chunk);
+					break; // If single decompress works, we're done
+				}
+				catch
+				{
+					offset++;
+				}
+			}
+			return result.ToArray();
 		}
 
 		// Token: 0x060000A5 RID: 165 RVA: 0x0000DF2C File Offset: 0x0000C12C
@@ -195,23 +254,39 @@ namespace SMPCTool
 				text = text + "Length: 0x" + num11.ToString("X2") + "\n\t\t";
 				text = text + "Count: " + this.SpansEntries.Count.ToString() + "\n";
 				text += "\t}\n}\n\n";
-				string[] array = File.ReadAllLines("AssetHashes.txt");
-				Dictionary<ulong, string> dictionary = new Dictionary<ulong, string>();
-				foreach (string text2 in array)
-				{
-					string[] array3 = text2.Split(new char[]
+					Dictionary<ulong, string> dictionary = new Dictionary<ulong, string>();
+					// AssetHashes.txt is optional - PS4 may not have one
+					string hashFile = "AssetHashes.txt";
+					if (Globals.Platform == PlatformMode.PS4)
 					{
-						','
-					});
-					string text3 = array3[0];
-					ulong key = Convert.ToUInt64(array3[1]);
-					string value = array3[0];
-					bool flag2 = !dictionary.ContainsKey(key);
-					if (flag2)
-					{
-						dictionary.Add(key, value);
+						// Also try PS4-specific hash file
+						if (File.Exists("AssetHashesPS4.txt"))
+							hashFile = "AssetHashesPS4.txt";
 					}
-				}
+					if (File.Exists(hashFile))
+					{
+						string[] array = File.ReadAllLines(hashFile);
+						foreach (string text2 in array)
+						{
+							string[] array3 = text2.Split(new char[] { ',' });
+							if (array3.Length >= 2)
+							{
+								string text3 = array3[0];
+								ulong key = 0;
+								try { key = Convert.ToUInt64(array3[1]); }
+								catch { continue; }
+								string value = array3[0];
+								if (!dictionary.ContainsKey(key))
+								{
+									dictionary.Add(key, value);
+								}
+							}
+						}
+					}
+					else
+					{
+						Console.WriteLine("WARNING: " + hashFile + " not found. Assets will show hex IDs only.");
+					}
 				uint[] array4 = new uint[this.SizeEntries.Count];
 				for (int j = 0; j < this.SizeEntries.Count; j++)
 				{
@@ -281,20 +356,47 @@ namespace SMPCTool
 			BinaryReader binaryReader = new BinaryReader(File.OpenRead(this.decompressedFileName));
 			binaryReader.BaseStream.Position = (long)offset;
 			this.ArchiveFiles = new List<ArchiveFile>();
-			for (int i = 0; i < length / 24; i++)  // เปลี่ยนจาก 72 → 24
-    // PC อ่าน: 3 bytes skip + InstallBucket + Chunkmap(4) + Filename(7+null) + 57 bytes
-    // PS4: 4 bytes unk1 + 4 bytes unk2 (sequential ID) + 8 bytes filename + 4 bytes unk3 + 4 bytes unk4
+
+			if (Globals.Platform == PlatformMode.PS4)
 			{
-				ArchiveFile item = default(ArchiveFile);
-				binaryReader.ReadBytes(3);
-				item.InstallBucket = binaryReader.ReadByte();
-				item.Chunkmap = binaryReader.ReadUInt32();
-				long position = binaryReader.BaseStream.Position;
-				item.Filename = this.BinaryReaderReadNTString(binaryReader);
-				binaryReader.BaseStream.Position = position + 7L;
-				binaryReader.ReadBytes(57);
-				this.ArchiveFiles.Add(item);
+				// PS4: 24 bytes per entry
+				// [0-1] u2: unknown
+				// [2]   u1: InstallBucket
+				// [3]   u1: unknown
+				// [4-7] u4: Chunkmap
+				// [8-15] str: Filename (null-terminated, max 8 chars)
+				// [16-23] 8 bytes: tail data
+				for (int i = 0; i < length / Globals.PS4ArchiveEntrySize; i++)
+				{
+					ArchiveFile item = default(ArchiveFile);
+					binaryReader.ReadUInt16(); // skip unknown u2
+					item.InstallBucket = binaryReader.ReadByte();
+					binaryReader.ReadByte(); // skip unknown u1
+					item.Chunkmap = binaryReader.ReadUInt32();
+					long position = binaryReader.BaseStream.Position;
+					item.Filename = this.BinaryReaderReadNTString(binaryReader);
+					// Seek to end of 8-byte filename field + 8-byte tail
+					binaryReader.BaseStream.Position = position + 16L;
+					this.ArchiveFiles.Add(item);
+				}
 			}
+			else
+			{
+				// PC: 72 bytes per entry (original logic)
+				for (int i = 0; i < length / Globals.PCArchiveEntrySize; i++)
+				{
+					ArchiveFile item = default(ArchiveFile);
+					binaryReader.ReadBytes(3);
+					item.InstallBucket = binaryReader.ReadByte();
+					item.Chunkmap = binaryReader.ReadUInt32();
+					long position = binaryReader.BaseStream.Position;
+					item.Filename = this.BinaryReaderReadNTString(binaryReader);
+					binaryReader.BaseStream.Position = position + 7L;
+					binaryReader.ReadBytes(57);
+					this.ArchiveFiles.Add(item);
+				}
+			}
+
 			binaryReader.Close();
 			binaryReader.Dispose();
 		}

@@ -3,6 +3,13 @@ using System.Collections.Generic;
 
 namespace SMPCTool
 {
+	// Platform mode enum to distinguish between PC and PS4 file formats
+	public enum PlatformMode
+	{
+		PC,
+		PS4
+	}
+
 	// Token: 0x02000008 RID: 8
 	public static class Globals
 	{
@@ -10,7 +17,7 @@ namespace SMPCTool
 		public static bool VortexInstallCMD = false;
 
 		// Token: 0x04000024 RID: 36
-		public static string Version = "1.1.1";
+		public static string Version = "2.0.0-PS4";
 
 		// Token: 0x04000025 RID: 37
 		public static string AssetArchivesDirectory;
@@ -44,5 +51,27 @@ namespace SMPCTool
 
 		// Token: 0x0400002F RID: 47
 		public static List<string> ReplacedTOCMapEntriesReplaceFileNames = new List<string>();
+
+		// --- PS4 Support ---
+		// Current platform mode (auto-detected or user-selected)
+		public static PlatformMode Platform = PlatformMode.PS4;
+
+		// PS4 asset header size (bytes before DAT1 data in archive)
+		public const int PS4AssetHeaderSize = 38;
+
+		// PC archive entry size in TOC ArchiveFiles section
+		public const int PCArchiveEntrySize = 72;
+
+		// PS4 archive entry size in TOC ArchiveFiles section
+		public const int PS4ArchiveEntrySize = 24;
+
+		// PC padded archive magic
+		public const uint PCPaddedArchiveMagic = 1380012868U;
+
+		// Helper to get current archive entry size
+		public static int ArchiveEntrySize
+		{
+			get { return Platform == PlatformMode.PS4 ? PS4ArchiveEntrySize : PCArchiveEntrySize; }
+		}
 	}
 }

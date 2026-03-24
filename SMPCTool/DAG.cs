@@ -21,16 +21,55 @@ namespace SMPCTool
 		public void DecompressDAG(string fileName)
 		{
 			BinaryReader binaryReader = new BinaryReader(File.OpenRead(this.Filename));
-			uint num = binaryReader.ReadUInt32();
-			bool flag = num != 2300540847U;
-			if (flag)
+			uint magic = binaryReader.ReadUInt32();
+
+			// Validate magic for both PC and PS4
+			bool validMagic = (magic == headerMagicPC || magic == headerMagicPS4);
+			if (!validMagic)
 			{
-				MessageBox.Show("Invalid DAG file", "", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+				MessageBox.Show("Invalid DAG file (magic: 0x" + magic.ToString("X8") + ")",
+					"", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+				binaryReader.Close();
+				binaryReader.Dispose();
+				return;
+			}
+
+			if (Globals.Platform == PlatformMode.PS4)
+			{
+				// PS4 DAG: magic(4) + decompressed_size(4) + unknown(4) + zlib_data
+				// The zlib stream starts at offset 12 (after 4 extra bytes)
+				int expectedSize = binaryReader.ReadInt32();
+				binaryReader.ReadInt32(); // skip 4 unknown bytes before zlib
+				byte[] compressedData = binaryReader.ReadBytes(
+					(int)(binaryReader.BaseStream.Length - binaryReader.BaseStream.Position));
+				binaryReader.Close();
+				binaryReader.Dispose();
+
+				byte[] bytes;
+				try
+				{
+					bytes = ZlibStream.UncompressBuffer(compressedData);
+				}
+				catch
+				{
+					// Fallback: streaming decompression
+					using (var ms = new MemoryStream(compressedData))
+					using (var zs = new ZlibStream(ms, Ionic.Zlib.CompressionMode.Decompress))
+					using (var output = new MemoryStream())
+					{
+						zs.CopyTo(output);
+						bytes = output.ToArray();
+					}
+				}
+
+				File.WriteAllBytes(fileName, bytes);
+				this.decompressedFileName = fileName;
 			}
 			else
 			{
+				// PC DAG: magic(4) + decompressed_size(4) + skip(4) + zlib_data
 				int count = binaryReader.ReadInt32();
-				binaryReader.ReadInt32();
+				binaryReader.ReadInt32(); // skip 4 bytes
 				byte[] bytes = ZlibStream.UncompressBuffer(binaryReader.ReadBytes(count));
 				File.WriteAllBytes(fileName, bytes);
 				this.decompressedFileName = fileName;
@@ -118,7 +157,10 @@ namespace SMPCTool
 		private const uint stringStartOffset = 102U;
 
 		// Token: 0x04000021 RID: 33
-		private const uint headerMagic = 2300540847U;
+		// PC DAG magic: 0x891FAF77 (bytes: 77 AF 1F 89)
+		private const uint headerMagicPC = 0x891FAF77U;
+		// PS4 DAG magic: 0x891F77AF (bytes: AF 77 1F 89) - confirmed from actual PS4 file
+		private const uint headerMagicPS4 = 0x891F77AFU;
 
 		// Token: 0x04000022 RID: 34
 		private string decompressedFileName;

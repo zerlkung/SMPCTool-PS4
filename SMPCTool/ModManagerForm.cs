@@ -410,26 +410,52 @@ namespace SMPCTool
 					}
 					binaryWriter.Close();
 					binaryWriter.Dispose();
+					int entrySize = Globals.ArchiveEntrySize;
 					binaryWriter = new BinaryWriter(new FileStream(Globals.TOC.decompressedFileName, FileMode.Append, FileAccess.Write));
-					binaryWriter.Seek(Globals.TOC.ArchiveFileSectionOffset + Globals.TOC.ArchiveFileSectionLen + 72 * num, SeekOrigin.Begin);
-					for (int k = 0; k < 72; k++)
+					binaryWriter.Seek(Globals.TOC.ArchiveFileSectionOffset + Globals.TOC.ArchiveFileSectionLen + entrySize * num, SeekOrigin.Begin);
+					for (int k = 0; k < entrySize; k++)
 					{
-						binaryWriter.Write(0);
+						binaryWriter.Write((byte)0);
 					}
 					binaryWriter.Close();
 					binaryWriter.Dispose();
 					binaryWriter = new BinaryWriter(File.OpenWrite(Globals.TOC.decompressedFileName));
 					binaryWriter.BaseStream.Position = (long)Globals.TOC.ArchiveFileSectionLenOffset;
-					binaryWriter.Write(Globals.TOC.ArchiveFileSectionLen + 72 * (num + 1));
+					binaryWriter.Write(Globals.TOC.ArchiveFileSectionLen + entrySize * (num + 1));
 					binaryWriter.BaseStream.Position = 8L;
 					binaryWriter.Write((int)binaryWriter.BaseStream.Length);
-					binaryWriter.BaseStream.Position = (long)(Globals.TOC.ArchiveFileSectionOffset + Globals.TOC.ArchiveFileSectionLen + 72 * num);
-					binaryWriter.Write(0);
-					binaryWriter.Write(0);
-					binaryWriter.Write(0);
-					binaryWriter.Write(0);
-					binaryWriter.Write(0);
-					binaryWriter.Write(Encoding.UTF8.GetBytes(smpcmodArchive.AssetArchiveName));
+					binaryWriter.BaseStream.Position = (long)(Globals.TOC.ArchiveFileSectionOffset + Globals.TOC.ArchiveFileSectionLen + entrySize * num);
+
+					if (Globals.Platform == PlatformMode.PS4)
+					{
+						// PS4: 24-byte archive entry
+						// [0-1] u2: unknown (0)
+						// [2]   u1: InstallBucket (0)
+						// [3]   u1: unknown (0)
+						// [4-7] u4: Chunkmap (0)
+						// [8-15] str: Filename (max 8 chars)
+						// [16-23] tail (0)
+						binaryWriter.Write((ushort)0); // unknown u2
+						binaryWriter.Write((byte)0);  // InstallBucket
+						binaryWriter.Write((byte)0);  // unknown u1
+						binaryWriter.Write((uint)0);  // Chunkmap
+						// Write filename (truncate to 8 bytes)
+						byte[] nameBytes = Encoding.UTF8.GetBytes(smpcmodArchive.AssetArchiveName);
+						byte[] nameField = new byte[8];
+						Array.Copy(nameBytes, nameField, Math.Min(nameBytes.Length, 8));
+						binaryWriter.Write(nameField);
+						binaryWriter.Write((long)0); // tail
+					}
+					else
+					{
+						// PC: 72-byte archive entry
+						binaryWriter.Write(0);
+						binaryWriter.Write(0);
+						binaryWriter.Write(0);
+						binaryWriter.Write(0);
+						binaryWriter.Write(0);
+						binaryWriter.Write(Encoding.UTF8.GetBytes(smpcmodArchive.AssetArchiveName));
+					}
 					foreach (ModManagerForm.SMPCModArchiveFile smpcmodArchiveFile in smpcmodArchive.SMPCModArchiveFiles)
 					{
 						for (int l = 0; l < Globals.TOC.TOCMaps.Length; l++)

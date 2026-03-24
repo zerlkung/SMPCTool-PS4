@@ -366,6 +366,10 @@ namespace SMPCTool
 			else
 			{
 				Globals.AssetArchivesDirectory = text + "\\";
+
+				// Auto-detect platform based on archive file naming
+				AutoDetectPlatform(Globals.AssetArchivesDirectory);
+
 				bool flag4 = !File.Exists(Globals.AssetArchivesDirectory + "toc.BAK");
 				if (flag4)
 				{
@@ -375,6 +379,43 @@ namespace SMPCTool
 				Globals.TOC.Decompress(Globals.TemporaryDirectory + "toc.dec");
 				Globals.TOC.ParseDecompressed();
 				this.ArchiveTreeViewReset();
+			}
+		}
+
+		/// <summary>
+		/// Auto-detect platform (PC vs PS4) by examining archive file names.
+		/// PS4 uses p000000..p000045 naming; PC uses g00sXXXX naming.
+		/// </summary>
+		private static void AutoDetectPlatform(string directory)
+		{
+			string[] files = Directory.GetFiles(directory);
+			bool hasPS4Archives = false;
+			bool hasPCArchives = false;
+
+			foreach (string file in files)
+			{
+				string name = Path.GetFileName(file);
+				if (name.StartsWith("p0") && name.Length >= 4)
+					hasPS4Archives = true;
+				if (name.StartsWith("g00s"))
+					hasPCArchives = true;
+			}
+
+			if (hasPS4Archives && !hasPCArchives)
+			{
+				Globals.Platform = PlatformMode.PS4;
+				Console.WriteLine("Platform auto-detected: PS4");
+			}
+			else if (hasPCArchives && !hasPS4Archives)
+			{
+				Globals.Platform = PlatformMode.PC;
+				Console.WriteLine("Platform auto-detected: PC");
+			}
+			else
+			{
+				// Default to PS4 if ambiguous
+				Globals.Platform = PlatformMode.PS4;
+				Console.WriteLine("Platform detection ambiguous, defaulting to PS4");
 			}
 		}
 
@@ -463,7 +504,11 @@ namespace SMPCTool
 					{
 						Globals.AssetArchivesDirectory = str + "\\";
 						File.WriteAllText("assetArchiveDir.txt", Globals.AssetArchivesDirectory);
-						MessageBox.Show("Asset Archives Successfully Set!", "", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
+
+						// Auto-detect platform
+						AutoDetectPlatform(Globals.AssetArchivesDirectory);
+
+						MessageBox.Show("Asset Archives Successfully Set! (" + Globals.Platform.ToString() + " mode)", "", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
 						bool flag5 = !File.Exists(Globals.AssetArchivesDirectory + "toc.BAK");
 						if (flag5)
 						{
@@ -832,7 +877,27 @@ namespace SMPCTool
 			string text = "";
 			text = text + "Asset Name: " + entry.FileName + "\n\n";
 			text = text + "Asset ID: 0x" + entry.FileAssetID.ToString("X2") + "\n\n";
-			BinaryReader binaryReader = new BinaryReader(new MemoryStream(assetBytes));
+			text = text + "Platform: " + Globals.Platform.ToString() + "\n\n";
+			text = text + "Raw Size: " + assetBytes.Length.ToString() + " bytes\n\n";
+
+			BinaryReader binaryReader;
+			int ps4HeaderOffset = 0;
+			if (Globals.Platform == PlatformMode.PS4 && assetBytes.Length > Globals.PS4AssetHeaderSize + 4)
+			{
+				// PS4: Check for 38-byte header before DAT1
+				if (assetBytes[38] == 0x31 && assetBytes[39] == 0x54 &&
+					assetBytes[40] == 0x41 && assetBytes[41] == 0x44) // "1TAD"
+				{
+					ps4HeaderOffset = Globals.PS4AssetHeaderSize;
+					text += "PS4 Asset Header: 38 bytes (type hash + metadata)\n";
+					text += "Asset Type Hash: 0x" + BitConverter.ToUInt32(assetBytes, 0).ToString("X8") + "\n\n";
+				}
+			}
+
+			// Create reader starting after PS4 header (if any)
+			byte[] dat1Bytes = new byte[assetBytes.Length - ps4HeaderOffset];
+			Array.Copy(assetBytes, ps4HeaderOffset, dat1Bytes, 0, dat1Bytes.Length);
+			binaryReader = new BinaryReader(new MemoryStream(dat1Bytes));
 			uint num = binaryReader.ReadUInt32();
 			bool flag = Path.GetExtension(entry.FileName) == ".texture";
 			if (flag)
@@ -1107,10 +1172,71 @@ namespace SMPCTool
 		// Token: 0x0600005E RID: 94 RVA: 0x000071C0 File Offset: 0x000053C0
 		private byte[] GetAssetBytes(TOCMapEntry entry)
 		{
+			if (Globals.Platform == PlatformMode.PS4)
+			{
+				return GetAssetBytesPS4(entry);
+			}
+			else
+			{
+				return GetAssetBytesPC(entry);
+			}
+		}
+
+		/// <summary>
+		/// PS4: Archives store raw assets contiguously (no padding/compression blocks).
+		/// Each asset has a 38-byte header before the DAT1 data.
+		/// </summary>
+		private byte[] GetAssetBytesPS4(TOCMapEntry entry)
+		{
+			string archivePath = Globals.AssetArchivesDirectory + entry.ArchiveName;
+			if (!File.Exists(archivePath))
+			{
+				Console.WriteLine("WARNING: Archive file not found: " + archivePath);
+				return new byte[0];
+			}
+
+			BinaryReader binaryReader = new BinaryReader(File.OpenRead(archivePath));
+			binaryReader.BaseStream.Position = (long)((ulong)entry.FileOffset);
+			byte[] rawAsset = binaryReader.ReadBytes(entry.FileSize);
+			binaryReader.Close();
+			binaryReader.Dispose();
+			return rawAsset;
+		}
+
+		/// <summary>
+		/// PS4: Extract the DAT1 payload from a PS4 asset (skip 38-byte header).
+		/// Returns the raw bytes after the PS4 asset header.
+		/// </summary>
+		private byte[] GetAssetDAT1BytesPS4(TOCMapEntry entry)
+		{
+			byte[] rawAsset = GetAssetBytesPS4(entry);
+			if (rawAsset.Length <= Globals.PS4AssetHeaderSize)
+			{
+				return rawAsset; // Too small, return as-is
+			}
+
+			// Check if asset has the PS4 header (look for 1TAD at offset 38)
+			if (rawAsset.Length > 42 &&
+				rawAsset[38] == 0x31 && rawAsset[39] == 0x54 &&
+				rawAsset[40] == 0x41 && rawAsset[41] == 0x44) // "1TAD"
+			{
+				byte[] dat1Bytes = new byte[rawAsset.Length - Globals.PS4AssetHeaderSize];
+				Array.Copy(rawAsset, Globals.PS4AssetHeaderSize, dat1Bytes, 0, dat1Bytes.Length);
+				return dat1Bytes;
+			}
+
+			return rawAsset; // No PS4 header detected, return as-is
+		}
+
+		/// <summary>
+		/// PC: Original GetAssetBytes logic with DPCS padding block decompression.
+		/// </summary>
+		private byte[] GetAssetBytesPC(TOCMapEntry entry)
+		{
 			BinaryReader binaryReader = new BinaryReader(File.OpenRead(Globals.AssetArchivesDirectory + entry.ArchiveName));
 			uint num = binaryReader.ReadUInt32();
 			List<MainForm.PaddingBlock> list = new List<MainForm.PaddingBlock>();
-			bool flag = num == 1380012868U;
+			bool flag = num == Globals.PCPaddedArchiveMagic;
 			byte[] result;
 			if (flag)
 			{
@@ -1507,17 +1633,45 @@ namespace SMPCTool
 			bool flag = Globals.TOC == null;
 			if (!flag)
 			{
+				if (Globals.Platform == PlatformMode.PS4)
+				{
+					// PS4 archives are not padded/compressed - no conversion needed
+					MessageBox.Show("PS4 archives do not use padding blocks. No conversion needed!",
+						"", MessageBoxButtons.OK, MessageBoxIcon.Information);
+					return;
+				}
+
 				string[] files = Directory.GetFiles(Globals.AssetArchivesDirectory);
 				foreach (string text in files)
 				{
 					string fileName = Path.GetFileName(text);
-					bool flag2 = fileName.StartsWith("g00s") && text != "dag" && text != "toc" && !text.EndsWith(".BAK");
+					bool flag2 = IsArchiveFile(fileName);
 					if (flag2)
 					{
 						this.ConvertPaddedAssetArchive(text);
 					}
 				}
 				MessageBox.Show("Done Converting Asset Archives For Modding!", "", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
+			}
+		}
+
+		/// <summary>
+		/// Check if a filename is an archive file (PC: g00sXXXX, PS4: pXXXXXX)
+		/// </summary>
+		private static bool IsArchiveFile(string fileName)
+		{
+			if (fileName == "dag" || fileName == "toc" || fileName.EndsWith(".BAK"))
+				return false;
+
+			if (Globals.Platform == PlatformMode.PS4)
+			{
+				// PS4 archives: p000000, p000001, ... p000045, etc.
+				return fileName.StartsWith("p") && fileName.Length >= 4;
+			}
+			else
+			{
+				// PC archives: g00sXXXX
+				return fileName.StartsWith("g00s");
 			}
 		}
 

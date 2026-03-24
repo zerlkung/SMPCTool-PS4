@@ -28,29 +28,47 @@ namespace SMPCTool
 			if (!flag)
 			{
 				BinaryReader binaryReader = new BinaryReader(File.OpenRead(openFileDialog.FileName));
+
+				// PS4: Skip 38-byte asset header if present
+				int baseOffset = 0;
+				if (Globals.Platform == PlatformMode.PS4)
+				{
+					// Check if DAT1/texture magic is at offset 38
+					if (binaryReader.BaseStream.Length > 42)
+					{
+						binaryReader.BaseStream.Position = 38;
+						uint testMagic = binaryReader.ReadUInt32();
+						if (testMagic == 1548058809U) // texture magic at offset 38
+						{
+							baseOffset = Globals.PS4AssetHeaderSize;
+						}
+					}
+					binaryReader.BaseStream.Position = baseOffset;
+				}
+
 				uint num = binaryReader.ReadUInt32();
 				bool flag2 = num != 1548058809U;
 				if (flag2)
 				{
-					MessageBox.Show("Invalid Texture Asset!", "", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+					MessageBox.Show("Invalid Texture Asset! (magic: 0x" + num.ToString("X8") + ")", "", MessageBoxButtons.OK, MessageBoxIcon.Hand);
 					binaryReader.Close();
 					binaryReader.Dispose();
 				}
 				else
 				{
-					binaryReader.BaseStream.Position = 88L;
+					binaryReader.BaseStream.Position = baseOffset + 88L;
 					uint num2 = binaryReader.ReadUInt32();
 					Console.WriteLine("secondFileSize: " + num2.ToString());
 					ushort num3 = binaryReader.ReadUInt16();
 					ushort num4 = binaryReader.ReadUInt16();
 					Console.WriteLine(num3.ToString() + "x" + num4.ToString());
-					binaryReader.BaseStream.Position = 104L;
+					binaryReader.BaseStream.Position = baseOffset + 104L;
 					byte b = binaryReader.ReadByte();
-					binaryReader.BaseStream.Position = 114L;
+					binaryReader.BaseStream.Position = baseOffset + 114L;
 					byte b2 = binaryReader.ReadByte();
 					int num5 = (int)num3;
 					int num6 = (int)num4;
-					binaryReader.BaseStream.Position = 128L;
+					binaryReader.BaseStream.Position = baseOffset + 128L;
 					foreach (string path in Directory.GetFiles(Globals.TemporaryDirectory))
 					{
 						bool flag3 = Path.GetFileName(path).StartsWith("mipmap");

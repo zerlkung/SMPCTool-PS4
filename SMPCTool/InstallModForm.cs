@@ -169,28 +169,27 @@ namespace SMPCTool
 				}
 				binaryWriter.Close();
 				binaryWriter.Dispose();
+				// Write modified asset to archive
 				binaryReader = new BinaryReader(File.OpenRead(Globals.AssetArchivesDirectory + tocmapEntry.ArchiveName));
-				uint num5 = binaryReader.ReadUInt32();
-				List<MainForm.PaddingBlock> list = new List<MainForm.PaddingBlock>();
 				binaryWriter = new BinaryWriter(File.OpenWrite(Globals.TemporaryDirectory + tocmapEntry.ArchiveName));
-				bool flag12 = num5 == 1380012868U;
-				if (!flag12)
+
+				if (Globals.Platform == PlatformMode.PS4)
 				{
+					// PS4: Archives are raw (no padding blocks)
+					// Direct byte replacement with offset adjustment
 					binaryReader.BaseStream.Position = 0L;
 					binaryWriter.BaseStream.Position = 0L;
-					bool flag13 = false;
+					bool written = false;
 					while (binaryReader.BaseStream.Position < binaryReader.BaseStream.Length)
 					{
-						Console.WriteLine(binaryReader.BaseStream.Position.ToString("X2") + "/" + binaryReader.BaseStream.Length.ToString("X2"));
 						byte[] buffer2 = binaryReader.ReadBytes(4096);
 						binaryWriter.Write(buffer2);
-						bool flag14 = binaryWriter.BaseStream.Position >= (long)((ulong)tocmapEntry.FileOffset) && !flag13;
-						if (flag14)
+						if (binaryWriter.BaseStream.Position >= (long)((ulong)tocmapEntry.FileOffset) && !written)
 						{
 							binaryWriter.BaseStream.Position = (long)((ulong)tocmapEntry.FileOffset);
 							binaryWriter.Write(buffer);
 							binaryReader.BaseStream.Position = (long)((ulong)tocmapEntry.FileOffset + (ulong)((long)fileSize));
-							flag13 = true;
+							written = true;
 						}
 					}
 					binaryReader.Close();
@@ -199,6 +198,39 @@ namespace SMPCTool
 					binaryWriter.Dispose();
 					File.Delete(Globals.AssetArchivesDirectory + tocmapEntry.ArchiveName);
 					File.Move(Globals.TemporaryDirectory + tocmapEntry.ArchiveName, Globals.AssetArchivesDirectory + tocmapEntry.ArchiveName);
+				}
+				else
+				{
+					// PC: Check for padded archive
+					uint num5 = binaryReader.ReadUInt32();
+					List<MainForm.PaddingBlock> list = new List<MainForm.PaddingBlock>();
+					bool flag12 = num5 == Globals.PCPaddedArchiveMagic;
+					if (!flag12)
+					{
+						binaryReader.BaseStream.Position = 0L;
+						binaryWriter.BaseStream.Position = 0L;
+						bool flag13 = false;
+						while (binaryReader.BaseStream.Position < binaryReader.BaseStream.Length)
+						{
+							Console.WriteLine(binaryReader.BaseStream.Position.ToString("X2") + "/" + binaryReader.BaseStream.Length.ToString("X2"));
+							byte[] buffer2 = binaryReader.ReadBytes(4096);
+							binaryWriter.Write(buffer2);
+							bool flag14 = binaryWriter.BaseStream.Position >= (long)((ulong)tocmapEntry.FileOffset) && !flag13;
+							if (flag14)
+							{
+								binaryWriter.BaseStream.Position = (long)((ulong)tocmapEntry.FileOffset);
+								binaryWriter.Write(buffer);
+								binaryReader.BaseStream.Position = (long)((ulong)tocmapEntry.FileOffset + (ulong)((long)fileSize));
+								flag13 = true;
+							}
+						}
+						binaryReader.Close();
+						binaryReader.Dispose();
+						binaryWriter.Close();
+						binaryWriter.Dispose();
+						File.Delete(Globals.AssetArchivesDirectory + tocmapEntry.ArchiveName);
+						File.Move(Globals.TemporaryDirectory + tocmapEntry.ArchiveName, Globals.AssetArchivesDirectory + tocmapEntry.ArchiveName);
+					}
 				}
 				File.Delete(Globals.AssetArchivesDirectory + "toc");
 				Globals.TOC.Compress(Globals.AssetArchivesDirectory + "toc");
