@@ -472,15 +472,27 @@ namespace SMPCTool
 		}
 
 		// Token: 0x06000048 RID: 72 RVA: 0x00005C30 File Offset: 0x00003E30
-		private void ArchiveTreeViewReset()
-		{
-			this.archiveTreeView.BeginUpdate();
-			for (int i = 0; i < Globals.TOC.ArchiveFiles.Count; i++)
+			private void ArchiveTreeViewReset()
 			{
-				this.archiveTreeView.Nodes.Add(Globals.TOC.ArchiveFiles[i].Filename);
+				this.archiveTreeView.BeginUpdate();
+				this.archiveTreeView.Nodes.Clear();
+				for (int i = 0; i < Globals.TOC.ArchiveFiles.Count; i++)
+				{
+					string filename = Globals.TOC.ArchiveFiles[i].Filename;
+					
+					// Filter out PC archives (g00s...) when in PS4 mode to prevent confusion and errors
+					if (Globals.Platform == PlatformMode.PS4)
+					{
+						bool isPS4Archive = filename.StartsWith("p0") || filename.StartsWith("a0") || 
+										   filename.StartsWith("i0") || filename.StartsWith("m0") ||
+										   filename.Contains("toc") || filename.Contains("dag");
+						if (!isPS4Archive) continue;
+					}
+
+					this.archiveTreeView.Nodes.Add(filename);
+				}
+				this.archiveTreeView.EndUpdate();
 			}
-			this.archiveTreeView.EndUpdate();
-		}
 
 		// Token: 0x06000049 RID: 73 RVA: 0x00005C9C File Offset: 0x00003E9C
 			private void selectAssetArchiveFolderToolStripMenuItem_Click(object sender, EventArgs e)
@@ -698,10 +710,20 @@ namespace SMPCTool
 		// Token: 0x06000053 RID: 83 RVA: 0x00006294 File Offset: 0x00004494
 		private void UpdateFileListView()
 		{
+			if (this.archiveTreeView.SelectedNode == null) return;
+
 			this.fileListView.BeginUpdate();
 			this.ClearRows(this.fileListView);
 			string fullPath = this.archiveTreeView.SelectedNode.FullPath;
-			int index = this.GetRootNode(this.archiveTreeView.SelectedNode).Index;
+			
+			TreeNode rootNode = this.GetRootNode(this.archiveTreeView.SelectedNode);
+			if (rootNode == null)
+			{
+				this.fileListView.EndUpdate();
+				return;
+			}
+			int index = rootNode.Index;
+
 			bool flag = fullPath.IndexOf("\\") == -1;
 			if (flag)
 			{
