@@ -339,22 +339,20 @@ namespace SMPCTool
 			{
 				text = File.ReadAllText("assetArchiveDir.txt");
 			}
-			else
-			{
-				SaveFileDialog saveFileDialog = new SaveFileDialog();
-				saveFileDialog.Title = "Select Asset Archive Folder...";
-				saveFileDialog.FileName = "[SELECT ASSET ARCHIVE FOLDER]";
-				saveFileDialog.RestoreDirectory = true;
-				bool flag2 = saveFileDialog.ShowDialog() != DialogResult.OK;
-				if (flag2)
+				else
 				{
-					Application.Exit();
-					return;
+					FolderBrowserDialog folderBrowserDialog = new FolderBrowserDialog();
+					folderBrowserDialog.Description = "Select Asset Archive Folder (where 'toc' file is located)";
+					folderBrowserDialog.ShowNewFolderButton = false;
+					if (folderBrowserDialog.ShowDialog() != DialogResult.OK)
+					{
+						Application.Exit();
+						return;
+					}
+					text = folderBrowserDialog.SelectedPath;
+					File.WriteAllText("assetArchiveDir.txt", text);
+					MessageBox.Show("Asset Archives Set", "", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
 				}
-				text = saveFileDialog.FileName.Substring(0, saveFileDialog.FileName.LastIndexOf("\\"));
-				File.WriteAllText("assetArchiveDir.txt", text);
-				MessageBox.Show("Asset Archives Set", "", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
-			}
 				string path = text + "\\toc";
 				if (!File.Exists(path)) path = text + "\\TOC";
 				if (!File.Exists(path)) path = text + "\\toc.BAK";
@@ -485,24 +483,21 @@ namespace SMPCTool
 		}
 
 		// Token: 0x06000049 RID: 73 RVA: 0x00005C9C File Offset: 0x00003E9C
-		private void selectAssetArchiveFolderToolStripMenuItem_Click(object sender, EventArgs e)
-		{
-			bool flag = Globals.TOC != null;
-			if (!flag)
+			private void selectAssetArchiveFolderToolStripMenuItem_Click(object sender, EventArgs e)
 			{
-				SaveFileDialog saveFileDialog = new SaveFileDialog();
-				saveFileDialog.Title = "Select Asset Archive Folder...";
-				saveFileDialog.FileName = "[SELECT ASSET ARCHIVE FOLDER]";
-				saveFileDialog.RestoreDirectory = true;
-				bool flag2 = File.Exists("assetArchiveDir.txt");
-				if (flag2)
+				bool flag = Globals.TOC != null;
+				if (!flag)
 				{
-					saveFileDialog.InitialDirectory = File.ReadAllText("assetArchiveDir.txt");
-				}
-				bool flag3 = saveFileDialog.ShowDialog() != DialogResult.OK;
-				if (!flag3)
-				{
-					string str = saveFileDialog.FileName.Substring(0, saveFileDialog.FileName.LastIndexOf("\\"));
+					FolderBrowserDialog folderBrowserDialog = new FolderBrowserDialog();
+					folderBrowserDialog.Description = "Select Asset Archive Folder (where 'toc' file is located)";
+					folderBrowserDialog.ShowNewFolderButton = false;
+					if (File.Exists("assetArchiveDir.txt"))
+					{
+						folderBrowserDialog.SelectedPath = File.ReadAllText("assetArchiveDir.txt");
+					}
+					if (folderBrowserDialog.ShowDialog() == DialogResult.OK)
+					{
+						string str = folderBrowserDialog.SelectedPath;
 						string path = str + "\\toc";
 						if (!File.Exists(path)) path = str + "\\TOC";
 						if (!File.Exists(path)) path = str + "\\toc.BAK";
@@ -533,13 +528,13 @@ namespace SMPCTool
 									Globals.TOC = new TOC(Globals.AssetArchivesDirectory + "toc.BAK");
 								else
 									Globals.TOC = new TOC(path);
-						Globals.TOC.Decompress(Globals.TemporaryDirectory + "toc.dec");
-						Globals.TOC.ParseDecompressed();
-						this.ArchiveTreeViewReset();
+							Globals.TOC.Decompress(Globals.TemporaryDirectory + "toc.dec");
+							Globals.TOC.ParseDecompressed();
+							this.ArchiveTreeViewReset();
+						}
 					}
 				}
 			}
-		}
 
 		// Token: 0x0600004A RID: 74 RVA: 0x00005E28 File Offset: 0x00004028
 		private void hashGeneratorToolStripMenuItem_Click(object sender, EventArgs e)
