@@ -489,7 +489,9 @@ namespace SMPCTool
 						if (!isPS4Archive) continue;
 					}
 
-					this.archiveTreeView.Nodes.Add(filename);
+					TreeNode node = new TreeNode(filename);
+					node.Tag = i; // Store the original archive index in Tag
+					this.archiveTreeView.Nodes.Add(node);
 				}
 				this.archiveTreeView.EndUpdate();
 			}
@@ -708,23 +710,23 @@ namespace SMPCTool
 		}
 
 		// Token: 0x06000053 RID: 83 RVA: 0x00006294 File Offset: 0x00004494
-		private void UpdateFileListView()
-		{
-			if (this.archiveTreeView.SelectedNode == null) return;
-
-			this.fileListView.BeginUpdate();
-			this.ClearRows(this.fileListView);
-			string fullPath = this.archiveTreeView.SelectedNode.FullPath;
-			
-			TreeNode rootNode = this.GetRootNode(this.archiveTreeView.SelectedNode);
-			if (rootNode == null)
+			private void UpdateFileListView()
 			{
-				this.fileListView.EndUpdate();
-				return;
-			}
-			int index = rootNode.Index;
-
-			bool flag = fullPath.IndexOf("\\") == -1;
+				if (this.archiveTreeView.SelectedNode == null) return;
+	
+				this.fileListView.BeginUpdate();
+				this.ClearRows(this.fileListView);
+				string fullPath = this.archiveTreeView.SelectedNode.FullPath;
+				
+				TreeNode rootNode = this.GetRootNode(this.archiveTreeView.SelectedNode);
+				if (rootNode == null || rootNode.Tag == null)
+				{
+					this.fileListView.EndUpdate();
+					return;
+				}
+				int index = (int)rootNode.Tag; // Use original index from Tag
+	
+				bool flag = fullPath.IndexOf("\\") == -1;
 			if (flag)
 			{
 				this.DisposeLVCS();
@@ -802,10 +804,12 @@ namespace SMPCTool
 		}
 
 		// Token: 0x06000055 RID: 85 RVA: 0x0000660C File Offset: 0x0000480C
-		private void archiveTreeView_DoubleClick(object sender, EventArgs e)
-		{
-			int index = this.GetRootNode(this.archiveTreeView.SelectedNode).Index;
-			bool flag = this.archiveTreeView.SelectedNode.Level == 0;
+			private void archiveTreeView_DoubleClick(object sender, EventArgs e)
+			{
+				TreeNode rootNode = this.GetRootNode(this.archiveTreeView.SelectedNode);
+				if (rootNode == null || rootNode.Tag == null) return;
+				int index = (int)rootNode.Tag; // Use original index from Tag
+				bool flag = this.archiveTreeView.SelectedNode.Level == 0;
 			if (flag)
 			{
 				bool flag2 = this.archiveTreeView.SelectedNode.Nodes.Count <= 0;
