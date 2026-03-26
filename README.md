@@ -1,4 +1,5 @@
-# SMPCTool-PS4 (Spider-Man PS4 Modding Tool)
+# SMPCTool-PS4 (Spider-Man PS4 Modding Tool) WIP 
+Python version here. [SMPCTool-PS4_python](https://github.com/zerlkung/SMPCTool-PS4_python)
 
 เครื่องมือสำหรับ Mod เกม **Marvel's Spider-Man** เวอร์ชัน **PS4** ที่พัฒนาต่อยอดมาจาก SMPCTool (PC) เพื่อให้สามารถแก้ไขไฟล์และติดตั้ง Mod บนเครื่อง PS4 ได้อย่างสมบูรณ์
 
