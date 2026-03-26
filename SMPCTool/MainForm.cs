@@ -741,17 +741,23 @@ namespace SMPCTool
 							if (flag2)
 							{
 								bool flag3 = tocmapEntry.FileName.StartsWith("0x") || !tocmapEntry.FileName.Contains("\\");
-								if (flag3)
-								{
-									string[] items = new string[]
+									if (flag3)
 									{
-										tocmapEntry.FileName,
-										tocmapEntry.FileSize.ToString(),
-										"Unknown",
-										tocmapEntry.FileAssetID.ToString()
-									};
-									this.fileListView.Items.Add(new ListViewItem(items));
-								}
+										string assetType = "Unknown";
+										if (Globals.Platform == PlatformMode.PS4)
+										{
+											assetType = GetAssetTypePS4(tocmapEntry);
+										}
+										
+										string[] items = new string[]
+										{
+											tocmapEntry.FileName,
+											tocmapEntry.FileSize.ToString(),
+											assetType,
+											tocmapEntry.FileAssetID.ToString()
+										};
+										this.fileListView.Items.Add(new ListViewItem(items));
+									}
 							}
 						}
 					}
@@ -794,6 +800,10 @@ namespace SMPCTool
 											else
 											{
 												text2 = "Unknown";
+												if (Globals.Platform == PlatformMode.PS4)
+												{
+													text2 = GetAssetTypePS4(tocmapEntry2);
+												}
 											}
 											
 											string[] items2 = new string[]
@@ -1284,26 +1294,65 @@ namespace SMPCTool
 		/// PS4: Extract the DAT1 payload from a PS4 asset (skip 38-byte header).
 		/// Returns the raw bytes after the PS4 asset header.
 		/// </summary>
-		private byte[] GetAssetDAT1BytesPS4(TOCMapEntry entry)
-		{
-			byte[] rawAsset = GetAssetBytesPS4(entry);
-			if (rawAsset.Length <= Globals.PS4AssetHeaderSize)
+			private byte[] GetAssetDAT1BytesPS4(TOCMapEntry entry)
 			{
-				return rawAsset; // Too small, return as-is
+				byte[] rawAsset = GetAssetBytesPS4(entry);
+				if (rawAsset.Length <= Globals.PS4AssetHeaderSize)
+				{
+					return rawAsset; // Too small, return as-is
+				}
+	
+				// Check if asset has the PS4 header (look for 1TAD at offset 38)
+				if (rawAsset.Length > 42 &&
+					rawAsset[38] == 0x31 && rawAsset[39] == 0x54 &&
+					rawAsset[40] == 0x41 && rawAsset[41] == 0x44) // "1TAD"
+				{
+					byte[] dat1Bytes = new byte[rawAsset.Length - Globals.PS4AssetHeaderSize];
+					Array.Copy(rawAsset, Globals.PS4AssetHeaderSize, dat1Bytes, 0, dat1Bytes.Length);
+					return dat1Bytes;
+				}
+	
+				return rawAsset; // No PS4 header detected, return as-is
 			}
-
-			// Check if asset has the PS4 header (look for 1TAD at offset 38)
-			if (rawAsset.Length > 42 &&
-				rawAsset[38] == 0x31 && rawAsset[39] == 0x54 &&
-				rawAsset[40] == 0x41 && rawAsset[41] == 0x44) // "1TAD"
+	
+			private string GetAssetTypePS4(TOCMapEntry entry)
 			{
-				byte[] dat1Bytes = new byte[rawAsset.Length - Globals.PS4AssetHeaderSize];
-				Array.Copy(rawAsset, Globals.PS4AssetHeaderSize, dat1Bytes, 0, dat1Bytes.Length);
-				return dat1Bytes;
+				string archivePath = Globals.AssetArchivesDirectory + entry.ArchiveName;
+				if (!File.Exists(archivePath)) return "Unknown";
+	
+				try
+				{
+					using (BinaryReader reader = new BinaryReader(File.OpenRead(archivePath)))
+					{
+						reader.BaseStream.Position = (long)((ulong)entry.FileOffset);
+						if (reader.BaseStream.Length < reader.BaseStream.Position + 42) return "Unknown";
+						
+						byte[] header = reader.ReadBytes(4);
+						uint typeHash = BitConverter.ToUInt32(header, 0);
+						
+						// Common Type Hashes for PS4
+						if (typeHash == 0xB5AF20BA) return "AnimClip";
+						if (typeHash == 0xB7E6B2CC) return "Texture";
+						if (typeHash == 0xBA20AFB5) return "AnimClip"; // Alternative
+						
+						// Fallback: Check DAT1 at offset 38
+						reader.BaseStream.Position = (long)((ulong)entry.FileOffset + 38);
+						byte[] dat1Magic = reader.ReadBytes(4);
+						if (Encoding.ASCII.GetString(dat1Magic) == "1TAD")
+						{
+							// Look further for common strings
+							byte[] preview = reader.ReadBytes(128);
+							string previewStr = Encoding.ASCII.GetString(preview);
+							if (previewStr.Contains("animclip")) return "AnimClip";
+							if (previewStr.Contains("ACTR")) return "Actor";
+							if (previewStr.Contains("TEX")) return "Texture";
+							return "DAT1 Asset";
+						}
+					}
+				}
+				catch { }
+				return "Unknown";
 			}
-
-			return rawAsset; // No PS4 header detected, return as-is
-		}
 
 		/// <summary>
 		/// PC: Original GetAssetBytes logic with DPCS padding block decompression.
